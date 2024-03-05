@@ -1,0 +1,5 @@
+fort let {
+    "chud" println
+} =
+
+1 fort if

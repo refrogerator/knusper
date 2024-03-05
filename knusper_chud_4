@@ -1,0 +1,13 @@
+among let [ 1 4 3 2 ] =
+
+chud let 4 =
+
+block let { "chud" println } =
+
+among i {
+    "chuddy: " print
+    i println
+    chud i =
+} for
+
+0 ! block if

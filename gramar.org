@@ -1,0 +1,63 @@
+#+title: Gramar
+
+* adding a variable
+#+begin_example
+<ident> let
+#+end_example
+
+* setting a variable
+#+begin_example
+<var> <value> =
+#+end_example
+
+* defining a function
+#+begin_src
+jort let ( a b ) {
+    a b - println
+} fn =
+#+end_src
+
+* calling a function
+<args> <fn> *@*
+** example:
+#+begin_src
+4 3 jort @
+#+end_src
+
+* indexing an array
+<array> <index> *#*
+(maybe with # or @)
+** example:
+#+begin_src
+test 2 #
+#+end_src
+
+* defining tuples (only really good for fns at this point)
+( <contents> )
+the spaces are important
+
+* defining a block
+{ <contents> }
+the spaces are important here too
+
+* defining an array
+[ <contents> ]
+as always, the spaces are important (i gotta change that but yk (or maybe even not because its consistent))
+** example
+#+begin_src
+among let [ 1 2 3 4 ] =
+#+end_src
+
+* for loop
+<iterator> <ident> <block> *for*
+** example
+#+begin_src
+among i { i println } for
+#+end_src
+
+* if statement
+<condition> <block> *if*
+** example
+#+begin_src
+0 { "chud" println } if
+#+end_src
