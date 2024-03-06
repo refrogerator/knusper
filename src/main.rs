@@ -458,8 +458,7 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
     }
 }
 
-fn main() {
-    let fortnite = fs::read_to_string("knusper_chud").unwrap();
+fn tokenize(fortnite: &str) -> Vec<Value> {
     let mut cur_val = Value::None;
     let mut cur_str = String::new();
     let mut vals = vec![];
@@ -582,12 +581,18 @@ fn main() {
             _ => {}
         }
     }
+    vals
+}
+
+fn main() {
+    let fortnite = fs::read_to_string("knusper_chud").unwrap();
     // println!("Hello, world! {:?}", vals);
     let mut istate = InterpreterState {
         stack: vec![],
         vars: hash_map::HashMap::new(),
         delims: Vec::new()
     };
+    let vals = tokenize(&fortnite);
     run_interp(&mut istate, &vals);
     // println!("{:?}, {:?}", istate.stack, istate.vars);
 }
