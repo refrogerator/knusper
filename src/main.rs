@@ -5,6 +5,7 @@ use std::fmt::Display;
 #[derive(Debug, Clone)]
 enum Keyword {
     Let,
+    Global,
     Print,
     PrintLn,
     Fn,
@@ -147,6 +148,7 @@ enum Delim {
 struct InterpreterState<'a> {
     stack: Vec<Value>,
     vars: hash_map::HashMap<String, Value>,
+    globals: hash_map::HashMap<String, Value>,
     delims: Vec<Delim>,
     ext_fns: &'a hash_map::HashMap<String, fn(Value) -> Value>
 }
@@ -159,7 +161,7 @@ impl<'a> InterpreterState<'a> {
                 return Some(i);
             }
             Value::Ident(ref i) => {
-                if let Some(Value::Int(v)) = self.vars.get(i) {
+                if let Some(Value::Int(v)) = self.get_var(i) {
                     return Some(*v);
                 } else {
                     return None;
@@ -188,25 +190,33 @@ impl<'a> InterpreterState<'a> {
         }
         return v;
     }
+    fn add_global(&mut self, name: &str) {
+        self.globals.insert(name.to_string(), Value::None);
+    }
     fn add_var(&mut self, name: &str) {
         self.vars.insert(name.to_string(), Value::None);
     }
     fn set_var(&mut self, name: &str, val: Value) {
-        let chud = self.vars.get_mut(name).unwrap();
+        let chud = self.vars.get_mut(name)
+            .or(self.globals.get_mut(name))
+            .unwrap();
         *chud = val;
     }
     fn get_var(&mut self, name: &str) -> Option<&Value> {
         self.vars.get(name)
+            .or(self.globals.get(name))
     }
     fn eval_tuple(&mut self, tuple: Value) -> Value {
         if let Value::Tuple(t) = tuple {
             let mut istate_new = InterpreterState {
                 stack: Vec::new(),
                 vars: self.vars.clone(),
+                globals: self.globals.clone(),
                 delims: Vec::new(),
                 ext_fns: self.ext_fns
             };
             run_interp(&mut istate_new, &t);
+            self.globals = istate_new.globals;
             return Value::Tuple(istate_new.stack);
         } else {
             return tuple;
@@ -217,10 +227,12 @@ impl<'a> InterpreterState<'a> {
             let mut istate_new = InterpreterState {
                 stack: Vec::new(),
                 vars: self.vars.clone(),
+                globals: self.globals.clone(),
                 delims: Vec::new(),
                 ext_fns: self.ext_fns
             };
             run_interp(&mut istate_new, &t);
+            self.globals = istate_new.globals;
             return Value::Array(istate_new.stack);
         } else {
             return tuple;
@@ -326,6 +338,7 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                                 let mut new_istate = InterpreterState {
                                     stack: Vec::new(),
                                     vars: hash_map::HashMap::new(),
+                                    globals: istate.globals.clone(),
                                     delims: Vec::new(),
                                     ext_fns: istate.ext_fns
                                 };
@@ -334,6 +347,7 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                                     new_istate.set_var(&arg, istate.get_value().unwrap());
                                 }
                                 run_interp(&mut new_istate, &f.body);
+                                istate.globals = new_istate.globals;
                             }
                             // TODO improvements needed
                             Value::ExtFn(ref _f) => {
@@ -393,6 +407,16 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                             panic!("use let on an ident, dummy!");
                         }
                     }
+                    Keyword::Global => {
+                        if let Value::Ident(i) = istate.stack.pop().unwrap() {
+                            istate.add_global(&i);
+                            // println!("added var {}", &i);
+                            istate.push_value(Value::Ident(i));
+                        } else {
+                            println!("{:?}", istate);
+                            panic!("use let on an ident, dummy!");
+                        }
+                    }
                     Keyword::Fn => {
                         let block_ = istate.get_value().unwrap();
                         let tuple_ = istate.get_value().unwrap();
@@ -430,6 +454,7 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                         let mut istate_new = InterpreterState {
                             stack: Vec::new(),
                             vars: istate.vars.to_owned(),
+                            globals: istate.globals.clone(),
                             delims: Vec::new(),
                             ext_fns: istate.ext_fns
                         };
@@ -456,6 +481,7 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                             println!("{:?}", istate);
                             panic!("not an array {:?}", array);
                         }
+                        istate.globals = istate_new.globals;
                     }
                     Keyword::If => {
                         let block = istate.get_value().unwrap();
@@ -465,6 +491,7 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                                 let mut istate_new = InterpreterState {
                                     stack: Vec::new(),
                                     vars: istate.vars.to_owned(),
+                                    globals: istate.globals.to_owned(),
                                     delims: Vec::new(),
                                     ext_fns: istate.ext_fns
                                 };
@@ -472,6 +499,7 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                                 for var in istate.vars.iter_mut() {
                                     *var.1 = istate_new.get_var(var.0).unwrap().clone();
                                 }
+                                istate.globals = istate_new.globals;
                             } else {
                                 println!("{:?}", istate);
                                 panic!("not a block {:?}", block);
@@ -553,6 +581,9 @@ fn tokenize(fortnite: &str) -> Vec<Value> {
                         "let" => {
                             vals.push(Value::Keyword(Keyword::Let));
                         }
+                        "global" => {
+                            vals.push(Value::Keyword(Keyword::Global));
+                        }
                         "print" => {
                             vals.push(Value::Keyword(Keyword::Print));
                         }
@@ -627,6 +658,7 @@ fn main() {
         let mut istate = InterpreterState {
             stack: vec![],
             vars: hash_map::HashMap::new(),
+            globals: hash_map::HashMap::new(),
             delims: Vec::new(),
             ext_fns: &ext_fns,
         };

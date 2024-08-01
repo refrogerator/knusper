@@ -1,5 +1,8 @@
-fort let ( ) {
-    "chud" println
+chuddy global "chud" =
+
+fort global ( ) {
+    chuddy println
+    fort @
 } fn =
 
 fort @
