@@ -32,7 +32,7 @@ enum Op {
     ArrayStart,
     ArrayEnd,
     CallFn,
-    IndexArray
+    IndexArray,
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +46,7 @@ enum Value {
     Int(i32),
     String(String),
     Ident(String),
+    ExtFn(String),
     Operation(Op),
     Keyword(Keyword),
     Fn(Fn),
@@ -75,6 +76,9 @@ impl Display for Value {
         match self {
             Value::Ident(i) => {
                 write!(f, "(ident: {})", i)
+            }
+            Value::ExtFn(i) => {
+                write!(f, "(ext_fn: {})", i)
             }
             Value::Int(i) => {
                 write!(f, "{}", i)
@@ -140,13 +144,14 @@ enum Delim {
 }
 
 #[derive(Debug)]
-struct InterpreterState {
+struct InterpreterState<'a> {
     stack: Vec<Value>,
     vars: hash_map::HashMap<String, Value>,
-    delims: Vec<Delim>
+    delims: Vec<Delim>,
+    ext_fns: &'a hash_map::HashMap<String, fn(Value) -> Value>
 }
 
-impl InterpreterState {
+impl<'a> InterpreterState<'a> {
     fn get_int(&mut self) -> Option<i32> {
         let val = self.stack.pop().unwrap();
         match val {
@@ -177,6 +182,8 @@ impl InterpreterState {
             let r = self.get_var(i);
             if r.is_some() {
                 return r.cloned();
+            } else if self.ext_fns.contains_key(i) {
+                return Some(Value::ExtFn(i.to_string()));
             }
         }
         return v;
@@ -196,7 +203,8 @@ impl InterpreterState {
             let mut istate_new = InterpreterState {
                 stack: Vec::new(),
                 vars: self.vars.clone(),
-                delims: Vec::new()
+                delims: Vec::new(),
+                ext_fns: self.ext_fns
             };
             run_interp(&mut istate_new, &t);
             return Value::Tuple(istate_new.stack);
@@ -209,7 +217,8 @@ impl InterpreterState {
             let mut istate_new = InterpreterState {
                 stack: Vec::new(),
                 vars: self.vars.clone(),
-                delims: Vec::new()
+                delims: Vec::new(),
+                ext_fns: self.ext_fns
             };
             run_interp(&mut istate_new, &t);
             return Value::Array(istate_new.stack);
@@ -312,20 +321,36 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                         istate.delims.push(Delim::Array(Vec::new()));
                     }
                     Op::CallFn => {
-                        if let Value::Fn(f) = istate.get_value().unwrap() {
-                            let mut new_istate = InterpreterState {
-                                stack: Vec::new(),
-                                vars: hash_map::HashMap::new(),
-                                delims: Vec::new(),
-                            };
-                            for arg in f.args.iter().rev() {
-                                new_istate.add_var(&arg);
-                                new_istate.set_var(&arg, istate.get_value().unwrap());
+                        match istate.get_value().unwrap() {
+                            Value::Fn(f) => {
+                                let mut new_istate = InterpreterState {
+                                    stack: Vec::new(),
+                                    vars: hash_map::HashMap::new(),
+                                    delims: Vec::new(),
+                                    ext_fns: istate.ext_fns
+                                };
+                                for arg in f.args.iter().rev() {
+                                    new_istate.add_var(&arg);
+                                    new_istate.set_var(&arg, istate.get_value().unwrap());
+                                }
+                                run_interp(&mut new_istate, &f.body);
                             }
-                            run_interp(&mut new_istate, &f.body);
-                        } else {
-                            println!("{:?}", istate);
-                            panic!("cant call non-fn");
+                            // TODO improvements needed
+                            Value::ExtFn(ref _f) => {
+                                let f = istate.ext_fns.get(_f).unwrap();
+                                let _val = istate.get_value();
+                                let val = if _val.is_none() {
+                                    Value::None
+                                } else {
+                                    _val.unwrap()
+                                };
+                                let res = f(val);
+                                istate.push_value(res);
+                            }
+                            _ => {
+                                println!("{:?}", istate);
+                                panic!("cant call non-fn");
+                            }
                         }
                     }
                     Op::IndexArray => {
@@ -351,6 +376,9 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                 istate.push_value(val.clone());
             }
             Value::Fn(_) => {
+                istate.push_value(val.clone());
+            }
+            Value::ExtFn(_) => {
                 istate.push_value(val.clone());
             }
             Value::Keyword(ref kw) => {
@@ -402,7 +430,8 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                         let mut istate_new = InterpreterState {
                             stack: Vec::new(),
                             vars: istate.vars.to_owned(),
-                            delims: Vec::new()
+                            delims: Vec::new(),
+                            ext_fns: istate.ext_fns
                         };
                         if let Value::Array(a) = array {
                             if let Value::Ident(ref i) = val_name {
@@ -436,7 +465,8 @@ fn run_interp(istate: &mut InterpreterState, vals: &[Value]) {
                                 let mut istate_new = InterpreterState {
                                     stack: Vec::new(),
                                     vars: istate.vars.to_owned(),
-                                    delims: Vec::new()
+                                    delims: Vec::new(),
+                                    ext_fns: istate.ext_fns
                                 };
                                 run_interp(&mut istate_new, b);
                                 for var in istate.vars.iter_mut() {
@@ -585,14 +615,25 @@ fn tokenize(fortnite: &str) -> Vec<Value> {
 }
 
 fn main() {
-    let fortnite = fs::read_to_string("knusper_chud").unwrap();
-    // println!("Hello, world! {:?}", vals);
-    let mut istate = InterpreterState {
-        stack: vec![],
-        vars: hash_map::HashMap::new(),
-        delims: Vec::new()
-    };
-    let vals = tokenize(&fortnite);
-    run_interp(&mut istate, &vals);
-    // println!("{:?}, {:?}", istate.stack, istate.vars);
+    //if let Some(file) = std::env::args().skip(1).next() {
+    let file = "knusper_chud";
+        let fortnite = fs::read_to_string(file).unwrap();
+        // println!("Hello, world! {:?}", vals);
+        let mut ext_fns: hash_map::HashMap<String, fn(Value) -> Value> = hash_map::HashMap::new();
+        ext_fns.insert("joe".to_string(), | a: Value | {
+            println!("the joe biden among us drip shirt");
+            Value::None
+        });
+        let mut istate = InterpreterState {
+            stack: vec![],
+            vars: hash_map::HashMap::new(),
+            delims: Vec::new(),
+            ext_fns: &ext_fns,
+        };
+        let vals = tokenize(&fortnite);
+        run_interp(&mut istate, &vals);
+        // println!("{:?}, {:?}", istate.stack, istate.vars);
+    //} else {
+    //    println!("argument required");
+    //}
 }

@@ -5,6 +5,11 @@
 <ident> let
 #+end_example
 
+* adding a global
+#+begin_example
+<ident> global
+#+end_example
+
 * setting a variable
 #+begin_example
 <var> <value> =

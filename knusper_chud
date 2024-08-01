@@ -1,5 +1,7 @@
-fort let {
+fort let ( ) {
     "chud" println
-} =
+} fn =
 
-1 fort if
+fort @
+
+joe @
