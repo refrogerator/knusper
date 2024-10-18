@@ -45,6 +45,7 @@ pub struct Fn {
 #[derive(Debug, Clone)]
 pub enum Value {
     Int(i32),
+    Char(char),
     String(String),
     Ident(String),
     ExtFn(String),
@@ -83,6 +84,9 @@ impl Display for Value {
             }
             Value::Int(i) => {
                 write!(f, "{}", i)
+            }
+            Value::Char(c) => {
+                write!(f, "{}", c)
             }
             Value::Keyword(kw) => {
                 write!(f, "{:?}", kw)
@@ -370,6 +374,8 @@ impl<'a> InterpreterState<'a> {
                             let array = self.get_value().unwrap();
                             if let Value::Array(a) = array {
                                 self.push_value(a[index as usize].clone());
+                            } else if let Value::String(a) = array {
+                                self.push_value(Value::Char(a.as_bytes()[index as usize].into()));
                             } else {
                                 println!("{:?}", self);
                                 panic!("index an array you tard");
@@ -379,6 +385,9 @@ impl<'a> InterpreterState<'a> {
                     }
                 }
                 Value::Int(_) => {
+                    self.push_value(val.clone());
+                }
+                Value::Char(_) => {
                     self.push_value(val.clone());
                 }
                 Value::String(_) => {
